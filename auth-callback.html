@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; connect-src https://xvqmyeqnotmgsbgfzkdv.supabase.co; style-src 'unsafe-inline'; frame-ancestors 'none';">
+    <meta http-equiv="X-Frame-Options" content="DENY">
     <title>DOSER</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -163,6 +166,13 @@
             document.getElementById(id).classList.add('active');
         }
 
+        function clearUrlTokens() {
+            // Clear sensitive tokens from URL to prevent leakage via history/bookmarks
+            if (window.history && window.history.replaceState) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+
         (async function() {
             try {
                 // Read params from both query string and hash
@@ -172,6 +182,12 @@
                 // token_hash approach: our custom email template sends token_hash directly
                 var tokenHash = params.get('token_hash') || hashParams.get('token_hash');
                 var type = params.get('type') || hashParams.get('type') || '';
+
+                // Validate the type parameter — only allow known values
+                var allowedTypes = ['recovery', 'signup', 'email', 'magiclink'];
+                if (type && allowedTypes.indexOf(type) === -1) {
+                    type = '';
+                }
 
                 // Also check for legacy access_token (implicit flow) or code (PKCE)
                 var accessToken = hashParams.get('access_token');
@@ -197,6 +213,7 @@
                         showState('state-error');
                         return;
                     }
+                    clearUrlTokens();
                 }
                 // Method 2: access_token in hash (implicit flow)
                 else if (accessToken && refreshToken) {
@@ -208,6 +225,7 @@
                         showState('state-error');
                         return;
                     }
+                    clearUrlTokens();
                 }
                 // Method 3: code (PKCE — unlikely to work cross-client but try anyway)
                 else if (code) {
@@ -219,6 +237,7 @@
                         showState('state-error');
                         return;
                     }
+                    clearUrlTokens();
                 }
 
                 // Route based on type
@@ -241,10 +260,14 @@
             var form = document.getElementById('reset-form');
             var btn = document.getElementById('reset-btn');
             var errorEl = document.getElementById('reset-error');
+            var rateLimited = false;
 
             form.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 errorEl.style.display = 'none';
+
+                // Rate limiting: prevent rapid re-submissions
+                if (rateLimited) return;
 
                 var password = document.getElementById('new-password').value;
                 var confirm = document.getElementById('confirm-password').value;
@@ -267,7 +290,8 @@
                     return;
                 }
 
-                // Submit
+                // Rate limit: disable button for 3 seconds between attempts
+                rateLimited = true;
                 btn.disabled = true;
                 btn.textContent = 'Updating...';
 
@@ -280,8 +304,12 @@
                     showState('state-reset-success');
                 } catch (err) {
                     showError(err.message || 'Something went wrong. Please try again.');
-                    btn.disabled = false;
-                    btn.textContent = 'Update Password';
+                    // Re-enable after 3 seconds (rate limiting)
+                    setTimeout(function() {
+                        rateLimited = false;
+                        btn.disabled = false;
+                        btn.textContent = 'Update Password';
+                    }, 3000);
                 }
             });
 
