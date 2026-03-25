@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DOSER - Opening App...</title>
+    <title>DOSER</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -16,112 +17,268 @@
             min-height: 100vh;
             padding: 20px;
         }
-        .container { text-align: center; max-width: 400px; }
-        .icon { font-size: 64px; margin-bottom: 24px; }
-        h1 { font-size: 24px; font-weight: 700; margin-bottom: 12px; letter-spacing: 1px; }
-        .message { font-size: 16px; color: #8899b4; margin-bottom: 32px; line-height: 1.5; }
+        .container { text-align: center; max-width: 400px; width: 100%; }
+        .icon { font-size: 56px; margin-bottom: 20px; }
+        h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; letter-spacing: 1px; }
+        .subtitle { font-size: 15px; color: #8899b4; margin-bottom: 28px; line-height: 1.5; }
         .spinner {
             width: 32px; height: 32px;
             border: 3px solid rgba(255,255,255,0.15);
             border-top-color: #4a90d9;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
-            margin: 0 auto 24px;
+            margin: 0 auto 20px;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .open-btn {
-            display: inline-block;
+
+        /* Form styles */
+        .form-group { margin-bottom: 16px; text-align: left; }
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #8899b4;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(255,255,255,0.08);
+            border: 1.5px solid rgba(255,255,255,0.12);
+            border-radius: 12px;
+            color: #fff;
+            font-size: 16px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .form-input:focus { border-color: #4a90d9; }
+        .form-input::placeholder { color: rgba(255,255,255,0.3); }
+        .form-hint {
+            font-size: 12px;
+            color: #667799;
+            margin-top: 6px;
+            line-height: 1.4;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
             background: #1a5fb4;
             color: #fff;
             text-decoration: none;
-            padding: 16px 40px;
+            padding: 15px 24px;
             border-radius: 14px;
             font-weight: 600;
             font-size: 17px;
             border: none;
             cursor: pointer;
-            margin-bottom: 16px;
+            margin-top: 24px;
+            transition: background 0.2s, opacity 0.2s;
         }
-        .open-btn:hover { background: #1c68c7; }
-        .help { font-size: 13px; color: #667799; line-height: 1.5; margin-top: 12px; }
+        .btn:hover { background: #1c68c7; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .error-text { color: #e85454; font-size: 14px; margin-top: 12px; line-height: 1.4; }
+        .success-text { color: #4ade80; font-size: 14px; margin-top: 8px; }
+        .help { font-size: 13px; color: #667799; line-height: 1.5; margin-top: 20px; }
+
+        /* State visibility */
+        .state { display: none; }
+        .state.active { display: block; }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Initial state: processing -->
-        <div id="processing-state">
+
+        <!-- Loading state -->
+        <div id="state-loading" class="state active">
             <div class="icon">🩺</div>
             <h1>DOSER</h1>
             <div class="spinner"></div>
-            <p class="message">Opening DOSER...</p>
+            <p class="subtitle">Verifying your link...</p>
         </div>
 
-        <!-- Ready state: prompt user to open app (fallback if auto-open fails) -->
-        <div id="ready-state" style="display:none;">
+        <!-- Password Reset Form -->
+        <div id="state-reset" class="state">
+            <div class="icon">🔒</div>
+            <h1>Reset Password</h1>
+            <p class="subtitle">Enter your new password below.</p>
+            <form id="reset-form" onsubmit="return false;">
+                <div class="form-group">
+                    <label class="form-label" for="new-password">New Password</label>
+                    <input class="form-input" id="new-password" type="password" placeholder="Enter new password" autocomplete="new-password" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="confirm-password">Confirm Password</label>
+                    <input class="form-input" id="confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password" required>
+                    <p class="form-hint">Min 8 characters, must include letters and numbers.</p>
+                </div>
+                <div id="reset-error" class="error-text" style="display:none;"></div>
+                <button type="submit" class="btn" id="reset-btn">Update Password</button>
+            </form>
+        </div>
+
+        <!-- Password Reset Success -->
+        <div id="state-reset-success" class="state">
+            <div class="icon">✅</div>
+            <h1>Password Updated!</h1>
+            <p class="subtitle">Your password has been changed successfully. You can now sign in with your new password in the DOSER app.</p>
+            <p class="help">You can close this page.</p>
+        </div>
+
+        <!-- Email Confirmed -->
+        <div id="state-confirmed" class="state">
+            <div class="icon">✅</div>
+            <h1>Email Confirmed!</h1>
+            <p class="subtitle">Your email has been verified. Open the DOSER app to get started.</p>
+            <p class="help">You can close this page.</p>
+        </div>
+
+        <!-- Generic Success -->
+        <div id="state-success" class="state">
             <div class="icon">✅</div>
             <h1>Verified!</h1>
-            <p class="message" id="action-message">Tap the button below to open DOSER.</p>
-            <a id="open-btn" class="open-btn" href="#">Open DOSER</a>
-            <p class="help">If DOSER doesn't open, make sure the app is installed from the App Store or TestFlight.</p>
+            <p class="subtitle">You're all set. Open the DOSER app to continue.</p>
+            <p class="help">You can close this page.</p>
         </div>
 
         <!-- Error state -->
-        <div id="error-state" style="display:none;">
+        <div id="state-error" class="state">
             <div class="icon">⚠️</div>
             <h1>Link Expired</h1>
-            <p class="message">This link is invalid or has expired. Please request a new one from the DOSER app.</p>
+            <p class="subtitle">This link is invalid or has expired. Please request a new one from the DOSER app.</p>
         </div>
     </div>
 
     <script>
-        (function() {
-            var hash = window.location.hash || '';
-            var search = window.location.search || '';
-            var params = new URLSearchParams(search);
-            var hashParams = new URLSearchParams(hash.substring(1));
+        var SUPABASE_URL = 'https://xvqmyeqnotmgsbgfzkdv.supabase.co';
+        var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh2cW15ZXFub3RtZ3NiZ2Z6a2R2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5NDUzODksImV4cCI6MjA4NjUyMTM4OX0.kQhQCY58HoCADAu6rlapLgsNFotoI9DL9Rko0aaGsg8';
 
-            // Check for tokens/code
-            var accessToken = hashParams.get('access_token');
-            var code = params.get('code');
-            var type = hashParams.get('type') || params.get('type') || '';
+        var supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-            if (!accessToken && !code && !hash.includes('token')) {
-                // No auth data - show error
-                document.getElementById('processing-state').style.display = 'none';
-                document.getElementById('error-state').style.display = 'block';
-                return;
+        function showState(id) {
+            document.querySelectorAll('.state').forEach(function(el) { el.classList.remove('active'); });
+            document.getElementById(id).classList.add('active');
+        }
+
+        (async function() {
+            try {
+                var hash = window.location.hash || '';
+                var search = window.location.search || '';
+                var params = new URLSearchParams(search);
+                var hashParams = new URLSearchParams(hash.substring(1));
+
+                var accessToken = hashParams.get('access_token');
+                var refreshToken = hashParams.get('refresh_token');
+                var code = params.get('code');
+                var type = hashParams.get('type') || params.get('type') || '';
+
+                // No auth data at all
+                if (!accessToken && !code && !hash.includes('token')) {
+                    showState('state-error');
+                    return;
+                }
+
+                // Exchange tokens / establish session
+                if (accessToken && refreshToken) {
+                    // Hash-based token flow
+                    await supabase.auth.setSession({
+                        access_token: accessToken,
+                        refresh_token: refreshToken
+                    });
+                } else if (code) {
+                    // PKCE code exchange flow
+                    await supabase.auth.exchangeCodeForSession(code);
+                    // Re-read type from the resolved session if needed
+                    if (!type) {
+                        var hashAfter = window.location.hash || '';
+                        var hp = new URLSearchParams(hashAfter.substring(1));
+                        type = hp.get('type') || type;
+                    }
+                }
+
+                // Verify we have a session
+                var sessionResult = await supabase.auth.getSession();
+                if (!sessionResult.data.session) {
+                    showState('state-error');
+                    return;
+                }
+
+                // Route based on type
+                if (type === 'recovery') {
+                    showState('state-reset');
+                    setupResetForm();
+                } else if (type === 'signup') {
+                    showState('state-confirmed');
+                } else {
+                    showState('state-success');
+                }
+
+            } catch (err) {
+                console.error('Auth error:', err);
+                showState('state-error');
             }
-
-            // Determine action message
-            var msg = 'Tap the button below to open DOSER.';
-            if (type === 'recovery') {
-                msg = 'Your password reset is ready. Tap the button below to set your new password.';
-            } else if (type === 'signup') {
-                msg = 'Your email has been confirmed! Tap the button below to get started.';
-            }
-
-            // Build a custom-scheme URL as fallback for when the user is already on this page
-            // (Universal Links don't intercept same-domain navigation in Safari)
-            var fallbackURL = 'doser://auth-callback';
-            if (search) {
-                fallbackURL += search;
-            }
-            if (hash) {
-                fallbackURL += hash;
-            }
-
-            // Set up the button with the custom scheme fallback
-            document.getElementById('action-message').textContent = msg;
-            document.getElementById('open-btn').href = fallbackURL;
-
-            // Try to open the app automatically via custom scheme
-            // This works because it's a user-initiated navigation context (clicked email link)
-            setTimeout(function() {
-                // After a brief delay, show the manual button as fallback
-                document.getElementById('processing-state').style.display = 'none';
-                document.getElementById('ready-state').style.display = 'block';
-            }, 1500);
         })();
+
+        function setupResetForm() {
+            var form = document.getElementById('reset-form');
+            var btn = document.getElementById('reset-btn');
+            var errorEl = document.getElementById('reset-error');
+
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                errorEl.style.display = 'none';
+
+                var password = document.getElementById('new-password').value;
+                var confirm = document.getElementById('confirm-password').value;
+
+                // Validate
+                if (password.length < 8) {
+                    showError('Password must be at least 8 characters.');
+                    return;
+                }
+                if (password.length > 128) {
+                    showError('Password must be 128 characters or fewer.');
+                    return;
+                }
+                var hasLetter = /[A-Za-z]/.test(password);
+                var hasNumber = /[0-9]/.test(password);
+                if (!hasLetter || !hasNumber) {
+                    showError('Password must contain both letters and numbers.');
+                    return;
+                }
+                if (password !== confirm) {
+                    showError('Passwords do not match.');
+                    return;
+                }
+
+                // Submit
+                btn.disabled = true;
+                btn.textContent = 'Updating...';
+
+                try {
+                    var result = await supabase.auth.updateUser({ password: password });
+                    if (result.error) {
+                        throw result.error;
+                    }
+                    // Sign out the browser session (user will sign in via the app)
+                    await supabase.auth.signOut();
+                    showState('state-reset-success');
+                } catch (err) {
+                    showError(err.message || 'Something went wrong. Please try again.');
+                    btn.disabled = false;
+                    btn.textContent = 'Update Password';
+                }
+            });
+
+            function showError(msg) {
+                errorEl.textContent = msg;
+                errorEl.style.display = 'block';
+            }
+        }
     </script>
 </body>
 </html>
