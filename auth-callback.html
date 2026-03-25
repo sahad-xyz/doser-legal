@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DOSER - Redirecting...</title>
+    <title>DOSER - Opening App...</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -16,29 +16,12 @@
             min-height: 100vh;
             padding: 20px;
         }
-        .container {
-            text-align: center;
-            max-width: 400px;
-        }
-        .icon {
-            font-size: 64px;
-            margin-bottom: 24px;
-        }
-        h1 {
-            font-size: 24px;
-            font-weight: 700;
-            margin-bottom: 12px;
-            letter-spacing: 1px;
-        }
-        .message {
-            font-size: 16px;
-            color: #8899b4;
-            margin-bottom: 32px;
-            line-height: 1.5;
-        }
+        .container { text-align: center; max-width: 400px; }
+        .icon { font-size: 64px; margin-bottom: 24px; }
+        h1 { font-size: 24px; font-weight: 700; margin-bottom: 12px; letter-spacing: 1px; }
+        .message { font-size: 16px; color: #8899b4; margin-bottom: 32px; line-height: 1.5; }
         .spinner {
-            width: 32px;
-            height: 32px;
+            width: 32px; height: 32px;
             border: 3px solid rgba(255,255,255,0.15);
             border-top-color: #4a90d9;
             border-radius: 50%;
@@ -46,111 +29,98 @@
             margin: 0 auto 24px;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .fallback {
-            display: none;
-            margin-top: 24px;
-        }
-        .fallback a {
+        .open-btn {
             display: inline-block;
             background: #1a5fb4;
             color: #fff;
             text-decoration: none;
-            padding: 14px 32px;
-            border-radius: 12px;
+            padding: 16px 40px;
+            border-radius: 14px;
             font-weight: 600;
-            font-size: 16px;
+            font-size: 17px;
+            border: none;
+            cursor: pointer;
+            margin-bottom: 16px;
         }
-        .fallback a:hover { background: #1c68c7; }
-        .help {
-            font-size: 13px;
-            color: #667799;
-            margin-top: 16px;
-            line-height: 1.4;
-        }
-        .error-state { display: none; }
+        .open-btn:hover { background: #1c68c7; }
+        .help { font-size: 13px; color: #667799; line-height: 1.5; margin-top: 12px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div id="loading-state">
+        <!-- Initial state: processing -->
+        <div id="processing-state">
             <div class="icon">🩺</div>
             <h1>DOSER</h1>
             <div class="spinner"></div>
-            <p class="message" id="status-message">Opening DOSER app...</p>
-            <div class="fallback" id="fallback">
-                <a id="open-app-link" href="#">Open DOSER App</a>
-                <p class="help">If the app didn't open automatically, tap the button above.<br>Make sure DOSER is installed on your device.</p>
-            </div>
+            <p class="message">Opening DOSER...</p>
         </div>
-        <div class="error-state" id="error-state">
+
+        <!-- Ready state: prompt user to open app (fallback if auto-open fails) -->
+        <div id="ready-state" style="display:none;">
+            <div class="icon">✅</div>
+            <h1>Verified!</h1>
+            <p class="message" id="action-message">Tap the button below to open DOSER.</p>
+            <a id="open-btn" class="open-btn" href="#">Open DOSER</a>
+            <p class="help">If DOSER doesn't open, make sure the app is installed from the App Store or TestFlight.</p>
+        </div>
+
+        <!-- Error state -->
+        <div id="error-state" style="display:none;">
             <div class="icon">⚠️</div>
-            <h1>Invalid Link</h1>
-            <p class="message">This link appears to be invalid or has expired. Please request a new password reset from the DOSER app.</p>
+            <h1>Link Expired</h1>
+            <p class="message">This link is invalid or has expired. Please request a new one from the DOSER app.</p>
         </div>
     </div>
 
     <script>
         (function() {
-            // Get the hash fragment (contains tokens from Supabase)
-            var hash = window.location.hash;
-            var search = window.location.search;
-
-            // Determine the action type from URL params
+            var hash = window.location.hash || '';
+            var search = window.location.search || '';
             var params = new URLSearchParams(search);
-            var type = params.get('type') || '';
-
-            // Also check hash for tokens
             var hashParams = new URLSearchParams(hash.substring(1));
-            var accessToken = hashParams.get('access_token');
-            var refreshToken = hashParams.get('refresh_token');
-            var hashType = hashParams.get('type') || type;
 
-            if (!accessToken && !hash && !search) {
-                // No tokens at all - show error
-                document.getElementById('loading-state').style.display = 'none';
+            // Check for tokens/code
+            var accessToken = hashParams.get('access_token');
+            var code = params.get('code');
+            var type = hashParams.get('type') || params.get('type') || '';
+
+            if (!accessToken && !code && !hash.includes('token')) {
+                // No auth data - show error
+                document.getElementById('processing-state').style.display = 'none';
                 document.getElementById('error-state').style.display = 'block';
                 return;
             }
 
-            // Determine the deep link path based on action type
-            var path = 'callback';
-            if (hashType === 'recovery' || type === 'recovery') {
-                path = 'reset-password';
-            } else if (hashType === 'signup' || type === 'signup') {
-                path = 'confirm-signup';
-            } else if (hashType === 'magiclink' || type === 'magiclink') {
-                path = 'magic-link';
+            // Determine action message
+            var msg = 'Tap the button below to open DOSER.';
+            if (type === 'recovery') {
+                msg = 'Your password reset is ready. Tap the button below to set your new password.';
+            } else if (type === 'signup') {
+                msg = 'Your email has been confirmed! Tap the button below to get started.';
             }
 
-            // Build the deep link URL - pass through the full hash fragment
-            var deepLink = 'doser://' + path + hash;
+            // Build a custom-scheme URL as fallback for when the user is already on this page
+            // (Universal Links don't intercept same-domain navigation in Safari)
+            var fallbackURL = 'doser://auth-callback';
+            if (search) {
+                fallbackURL += search;
+            }
+            if (hash) {
+                fallbackURL += hash;
+            }
 
-            // Store the link for the fallback button
-            var fallbackEl = document.getElementById('fallback');
-            var openAppLink = document.getElementById('open-app-link');
-            openAppLink.href = deepLink;
+            // Set up the button with the custom scheme fallback
+            document.getElementById('action-message').textContent = msg;
+            document.getElementById('open-btn').href = fallbackURL;
 
-            // Try to open the app
-            var opened = false;
-
-            // Method 1: window.location (most reliable for custom schemes on iOS)
-            window.location.href = deepLink;
-
-            // Show fallback button after 2 seconds if app didn't open
+            // Try to open the app automatically via custom scheme
+            // This works because it's a user-initiated navigation context (clicked email link)
             setTimeout(function() {
-                if (!document.hidden) {
-                    document.getElementById('status-message').textContent =
-                        'Tap the button below to open DOSER';
-                    fallbackEl.style.display = 'block';
-                }
-            }, 2000);
-
-            // Listen for page becoming hidden (means app opened)
-            document.addEventListener('visibilitychange', function() {
-                if (document.hidden) {
-                    opened = true;
-                }
-            });
+                // After a brief delay, show the manual button as fallback
+                document.getElementById('processing-state').style.display = 'none';
+                document.getElementById('ready-state').style.display = 'block';
+            }, 1500);
         })();
     </script>
 </body>
